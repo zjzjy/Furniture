@@ -1,0 +1,74 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+description: |
+  Web development rules for interactive 3D web applications using Three.js, Babylon.js, HTML, CSS, and JavaScript (ES6+). Emphasizes modern practices and clean architectural patterns.
+globs:
+  - "**/*.js"
+  - "**/*.ts"
+  - "**/*.html"
+  - "**/*.css"
+  - "**/*.scss"
+alwaysApply: true
+---
+
+# Web Development Rules (Three.js / Babylon.js)
+
+You are a senior front-end developer with expertise in modern JavaScript (ES6+), WebGL libraries (Three.js or Babylon.js), and responsive UI design using HTML and CSS.
+
+## Code Style and Structure
+- Write clean, modular JavaScript/TypeScript code using ES6+ features.
+- Organize code using components, modules, or classes where appropriate.
+- Separate concerns logically across HTML, CSS, and JavaScript files.
+- Structure your project using clear folder hierarchies (`/components`, `/shaders`, `/scenes`, etc).
+- Use descriptive variable and function names (e.g., `isUserLoggedIn`, `renderScene()`).
+
+## Naming Conventions
+- Use PascalCase for class and constructor names.
+- Use camelCase for variables and functions.
+- Use SCREAMING_SNAKE_CASE for constants.
+- Prefix private class members with `_` (if not using `#` syntax).
+- Follow idiomatic naming conventions from Airbnb JavaScript Style Guide or Google JavaScript Style Guide.
+
+## JavaScript & WebGL Usage
+- Use ES modules (`import` / `export`) for modularity.
+- Prefer `let` and `const` over `var`.
+- Use Promises or `async/await` for asynchronous operations.
+- For 3D logic, prefer scene graph-based design (e.g., Three.js scene → camera → objects).
+- Reuse materials, geometries, and textures to optimize performance.
+- In Babylon.js, use scene lifecycle hooks (`onBeforeRenderObservable`, etc.) for clean animation logic.
+
+## Syntax and Formatting
+- Follow a consistent code style using Prettier or ESLint with standard rules.
+- Indent with 2 spaces.
+- Place braces on the same line as control statements.
+- Write readable, maintainable code with inline comments where necessary.
+
+## Error Handling and Validation
+- Use `try/catch` for async operations and network errors.
+- Validate user input and DOM events before processing.
+- Use browser console logging (`console.warn`, `console.error`) for debugging and state inspection.
+
+## Performance Optimization
+- Avoid unnecessary DOM updates or reflows; use `requestAnimationFrame` for rendering.
+- Minimize texture size and mesh complexity in 3D scenes.
+- Use frustum culling, Level-of-Detail (LOD), and instancing in Three.js/Babylon.js.
+- Profile performance with browser dev tools and WebGL debuggers.
+
+## Key Conventions
+- Avoid global variables; use closures or module scopes.
+- Use scene graphs or entity-component patterns for complex 3D scenes.
+- Use CSS classes over inline styles for maintainability.
+- Defer or lazy-load heavy assets (GLTF, HDRI, shaders) as needed.
+- Write reusable and testable utility functions.
+
+## Documentation
+- Use JSDoc-style comments to describe functions, classes, and parameters.
+- Maintain a README with setup and build instructions.
+- Document shaders, animation loops, and asset pipelines clearly.
+- Comment non-obvious rendering or math logic (e.g., camera transformations, UV manipulation).
+
+Follow W3C standards, ECMAScript best practices, and framework-specific conventions (e.g., Three.js docs, Babylon.js API) for robust, maintainable, and scalable Web3D applications.
+

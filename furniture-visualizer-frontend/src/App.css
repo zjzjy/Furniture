@@ -1,0 +1,151 @@
+#root {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.logo {
+  height: 6em;
+  padding: 1.5em;
+  will-change: filter;
+  transition: filter 300ms;
+}
+.logo:hover {
+  filter: drop-shadow(0 0 2em #646cffaa);
+}
+.logo.react:hover {
+  filter: drop-shadow(0 0 2em #61dafbaa);
+}
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  a:nth-of-type(2) .logo {
+    animation: logo-spin infinite 20s linear;
+  }
+}
+
+.card {
+  padding: 1em;
+  margin-bottom: 1em;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.read-the-docs {
+  color: #888;
+}
+
+/* App.tsx 主要布局 */
+.App {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.main-content-area {
+  display: flex;
+  flex-grow: 1;
+  gap: 1rem; /* 控制面板和查看器之间的间距 */
+  padding: 0 1rem; /* 页面左右的padding */
+}
+
+.controls-panel-area {
+  width: 350px; /* 控制面板固定宽度 */
+  min-width: 300px;
+  max-height: calc(100vh - 120px); /* 减去header和一些边距 */
+  overflow-y: auto; /* 如果内容过多则滚动 */
+  padding: 1rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background-color: #fff;
+}
+
+.viewer-area {
+  flex-grow: 1; /* 查看器占据剩余空间 */
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  overflow: hidden; /* 确保Canvas不会溢出 */
+}
+
+/* 全局消息样式 */
+.message-container.global-message {
+  position: fixed; /* 或者其他不影响布局的方式 */
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.75em 1.5em;
+  border-radius: 6px;
+  z-index: 1000;
+  /* 其他card的属性可能需要调整，或者给它一个更独特的类名 */
+}
+
+.message {
+  margin: 0;
+  font-weight: bold;
+}
+.message.success {
+  color: green;
+}
+.message.error {
+  color: red;
+}
+.message.info {
+  color: #333;
+}
+
+/* FurnitureControls.tsx 内部样式 */
+.furniture-controls h4, .furniture-controls h5 {
+  margin-top: 0;
+  margin-bottom: 0.5em;
+}
+
+.upload-section, .available-furniture-section, .scene-furniture-section {
+  margin-bottom: 1.5em;
+  padding: 1em;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+}
+
+.available-furniture-section ul li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.5em;
+  border-bottom: 1px solid #f0f0f0;
+}
+.available-furniture-section ul li:last-child {
+  border-bottom: none;
+}
+
+/* FileUpload.tsx 内部元素样式调整 (如果需要) */
+.controls-container.card, /* App.tsx 中旧的controls-container */
+.furniture-controls .upload-section .card /* FileUpload 现在在 FurnitureControls 内部 */
+{
+  padding: 1em; /* 确保和新card一致 */
+  box-shadow: none; /* FileUpload自身不应再有独立阴影，父级有 */
+  border: none; /* 同上 */
+  background-color: transparent; /* 同上 */
+}
+
+.thickness-control {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}

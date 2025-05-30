@@ -29,14 +29,30 @@ def load_midas_model(model_type="MiDaS_small", model_path=None):
         model = torch.hub.load("intel-isl/MiDaS", model_type) # Allow various model types
         transform_type = "transforms"
         # Adjust transform based on model type if necessary (some models have specific transforms)
-        if "dpt" in model_type.lower() or "beit" in model_type.lower() or "swin" in model_type.lower() :
-             # DPT, BEiT, Swin models typically use a different transform
-            try:
-                transform = torch.hub.load("intel-isl/MiDaS", "dpt_transform" if "dpt" in model_type.lower() else model_type.split('_')[0] + "_transform") # Heuristic
-            except: # Fallback for older or differently named transforms
-                 print(f"Specific transform for {model_type} not found by heuristic, using MiDaS default transform.")
-                 transform = torch.hub.load("intel-isl/MiDaS", transform_type).default_transform
-        else: # For older MiDaS_small etc.
+        if "dpt_hybrid_midas" in model_type.lower(): # Specific case for dpt_hybrid_midas
+             transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_hybrid_midas_transform
+        elif "dpt_beit_large_512" in model_type.lower(): # Specific case
+             transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_beit_large_512_transform
+        elif "dpt_beit_base_384" in model_type.lower(): # Specific case
+             transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_beit_base_384_transform
+        elif "dpt_swin2_large_384" in model_type.lower(): # Specific case
+             transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_swin2_large_384_transform
+        elif "dpt_swin2_base_384" in model_type.lower(): # Specific case
+             transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_swin2_base_384_transform
+        elif "dpt_swin2_tiny_256" in model_type.lower(): # Specific case
+             transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_swin2_tiny_256_transform
+        elif "dpt_large_midas" in model_type.lower(): # Older DPT Large
+            transform = torch.hub.load("intel-isl/MiDaS", "transforms").dpt_large_midas_transform
+        elif "dpt_large" in model_type.lower() and "midas" not in model_type.lower() : # General DPT, often just "dpt_transform"
+             transform = torch.hub.load("intel-isl/MiDaS", "dpt_transform")
+        elif "beit" in model_type.lower(): # General BEiT
+            transform = torch.hub.load("intel-isl/MiDaS", "beit_transform")
+        elif "swin" in model_type.lower(): # General Swin
+            transform = torch.hub.load("intel-isl/MiDaS", "swin_transform")
+        elif "midas_v21_small" in model_type.lower(): # MiDaS v2.1 Small
+            transform = torch.hub.load("intel-isl/MiDaS", "transforms").midas_v21_small_transform
+        else: # For MiDaS_small (v2.0) or other fallbacks
+            print(f"Using default small_transform for model type: {model_type}")
             transform = torch.hub.load("intel-isl/MiDaS", transform_type).small_transform
 
 
@@ -46,9 +62,9 @@ def load_midas_model(model_type="MiDaS_small", model_path=None):
         print(f"MiDaS model loaded on {device}")
         return model, transform, device
     except Exception as e:
-        print(f"Error loading MiDaS model: {e}")
+        print(f"Error loading MiDaS model or its transform: {e}")
         print("Please ensure you have an internet connection for torch.hub.load,")
-        print("or that models are locally available and correctly configured as per the reference repository.")
+        print("the model type is correct, and any necessary dependencies for the model are met.")
         return None, None, None
 
 def segment_foreground(image_rgb_np):
@@ -101,7 +117,7 @@ def segment_foreground(image_rgb_np):
         return image_rgba_pil, mask_np
 
 
-def preprocess_image(image_path, transform_func): # Renamed transform to transform_func
+def preprocess_image(image_path, transform_func):
     """
     Loads an image using OpenCV, converts to RGB, and applies MiDaS transforms.
     """
@@ -112,21 +128,19 @@ def preprocess_image(image_path, transform_func): # Renamed transform to transfo
         return None, None
     
     img_rgb_np = cv2.cvtColor(img_cv, cv2.COLOR_BGR2RGB)
-    # Apply the MiDaS-specific transform to the RGB numpy array
-    # The transform function from torch.hub typically expects a PIL image or numpy array
-    # and returns a tensor.
-    try:
-        # Some transforms expect PIL, some numpy. Let's try PIL first.
+    try:        
         img_pil_for_transform = Image.fromarray(img_rgb_np)
         input_batch = transform_func(img_pil_for_transform)
-    except TypeError: # If transform expects numpy array directly or different format
-        print("MiDaS transform failed with PIL, trying with NumPy array.")
-        input_batch = transform_func(img_rgb_np) # This might need specific reshaping based on model
-    except Exception as e_transform:
-        print(f"Error applying MiDaS transform: {e_transform}")
-        return None, img_rgb_np # Return original RGB for fallback or other uses
 
-    return input_batch, img_rgb_np # Return original RGB for segmentation and MiDaS
+    except Exception as e_transform:
+        print(f"Error applying MiDaS transform (tried PIL): {e_transform}. Trying with NumPy array directly.")
+        try:
+            input_batch = transform_func(img_rgb_np)
+        except Exception as e_transform_numpy:
+            print(f"Error applying MiDaS transform with NumPy as well: {e_transform_numpy}")
+            return None, img_rgb_np 
+    
+    return input_batch, img_rgb_np
 
 def get_depth_map(model, input_batch, device, original_height, original_width):
     """
@@ -147,115 +161,162 @@ def get_depth_map(model, input_batch, device, original_height, original_width):
     print("Depth map generated.")
     return depth_map_np
 
-def create_glb_from_depth_and_texture(depth_map_np, texture_image_rgba_pil, foreground_mask_np, output_glb_path, depth_scale_factor=0.1):
+def create_glb_from_depth_and_texture(depth_map_np, texture_image_rgba_pil, foreground_mask_np, output_glb_path, depth_scale_factor=0.1, thickness=0.05):
     """
-    Creates a GLB file from a depth map and an RGBA texture image, using a foreground mask.
-    The depth map is used to generate a height field mesh. Background depth is flattened.
-    The texture_image_rgba_pil (with transparency) is applied as a texture.
+    Creates a GLB file with a more "solid" look by attempting to add sides and a back.
+    The depth map is used for the front surface. Background depth is flattened.
+    The texture_image_rgba_pil (with transparency) is applied as a texture to the front.
+    Sides and back are untextured or have a default color.
     """
-    print(f"Creating GLB: {output_glb_path} with depth_scale_factor: {depth_scale_factor}")
+    print(f"Creating solid GLB: {output_glb_path} with depth_scale: {depth_scale_factor}, thickness: {thickness}")
 
     try:
         import trimesh 
         from trimesh import util as trimesh_util
+        import logging
+        log = logging.getLogger('trimesh')
+        log.setLevel(logging.WARNING)
+
 
         H, W = depth_map_np.shape
-        # texture_image_rgba_pil is already a PIL image
-
-        min_depth = np.min(depth_map_np)
-        max_depth = np.max(depth_map_np)
         
-        # Base Z value for flat background areas
-        # This ensures background parts of the mesh are co-planar.
-        background_z_offset = 0 # Or use (min_depth - 0.5) if min_depth is not already a good base
+        min_depth_val = np.min(depth_map_np)
+        max_depth_val = np.max(depth_map_np)
+        
+        background_z_value_normalized = 0 
 
-        if max_depth == min_depth: 
+        if max_depth_val == min_depth_val: 
             normalized_depth_map = np.zeros_like(depth_map_np)
         else:
-            # Normalize entire depth map first
-            normalized_depth_map = (depth_map_np - min_depth) / (max_depth - min_depth)
+            normalized_depth_map = (depth_map_np - min_depth_val) / (max_depth_val - min_depth_val)
         
         print(f"Overall depth map normalized. Min: {np.min(normalized_depth_map):.3f}, Max: {np.max(normalized_depth_map):.3f}")
 
-        vertices = []
-        uvs = []
+        front_vertices = []
+        front_uvs = []
+        vertex_indices_map = {} 
+
         for r in range(H): 
             for c in range(W): 
                 x_coord = c / (W - 1) - 0.5  
                 y_coord = (H - 1 - r) / (H - 1) - 0.5 
                 
-                is_foreground = foreground_mask_np[r, c] > 0 # Check mask (255 for fg)
+                is_foreground = foreground_mask_np[r, c] > 0 
 
                 if is_foreground:
-                    # Apply depth scaling only to foreground
-                    # Subtract 0.5 to center the object's depth variation around z=0 before scaling
                     z_coord_offset = normalized_depth_map[r, c] - 0.5 
                     z_coord = z_coord_offset * depth_scale_factor
                 else:
-                    # Flatten background
-                    # Adjust this if your desired background plane is different
-                    z_coord = (background_z_offset - 0.5) * depth_scale_factor 
-                                    
-                vertices.append([x_coord, y_coord, z_coord])
+                    z_coord_offset = background_z_value_normalized - 0.5
+                    z_coord = z_coord_offset * depth_scale_factor
+                                     
+                current_vertex_idx = len(front_vertices)
+                front_vertices.append([x_coord, y_coord, z_coord])
+                vertex_indices_map[(r,c)] = current_vertex_idx
                 
                 u_coord = c / (W - 1)
                 v_coord = 1.0 - (r / (H - 1)) 
-                uvs.append([u_coord, v_coord])
+                front_uvs.append([u_coord, v_coord])
+        
+        front_vertices_np = np.array(front_vertices, dtype=np.float32)
+        front_uvs_np = np.array(front_uvs, dtype=np.float32)
 
-        vertices_np = np.array(vertices, dtype=np.float32)
-        uvs_np = np.array(uvs, dtype=np.float32)
-
-        faces = []
+        front_faces = []
         for r in range(H - 1):
             for c in range(W - 1):
-                idx00 = r * W + c        
-                idx01 = r * W + (c + 1)  
-                idx10 = (r + 1) * W + c  
-                idx11 = (r + 1) * W + (c + 1)
-                faces.append([idx00, idx10, idx01])
-                faces.append([idx01, idx10, idx11])
+                idx00 = vertex_indices_map[(r,c)]        
+                idx01 = vertex_indices_map[(r,c+1)]  
+                idx10 = vertex_indices_map[(r+1,c)]  
+                idx11 = vertex_indices_map[(r+1,c+1)]
+                front_faces.append([idx00, idx10, idx01])
+                front_faces.append([idx01, idx10, idx11])
         
-        faces_np = np.array(faces, dtype=np.int32)
+        front_faces_np = np.array(front_faces, dtype=np.int32)
 
-        if len(vertices_np) == 0 or len(faces_np) == 0:
-            print("Error: No vertices or faces generated. Cannot create mesh.")
-            with open(output_glb_path, 'w') as f:
-                f.write("Error - No vertices or faces generated.")
+        if len(front_vertices_np) == 0 or len(front_faces_np) == 0:
+            print("Error: No front vertices or faces generated. Cannot create mesh.")
+            with open(output_glb_path, 'w') as f: f.write("Error - No front vertices or faces generated.")
             return
+        
+        back_vertices_np = front_vertices_np.copy()
+        back_vertices_np[:, 2] -= thickness 
 
-        mesh = trimesh.Trimesh(vertices=vertices_np, faces=faces_np, process=False)
+        num_front_vertices = len(front_vertices_np)
+        all_vertices = np.vstack((front_vertices_np, back_vertices_np))
         
-        # Ensure the material uses the RGBA PIL image for transparency
+        all_faces = list(front_faces_np)
+        
+        back_faces_offset = num_front_vertices
+        for face in front_faces_np:
+            all_faces.append([face[0] + back_faces_offset, 
+                              face[2] + back_faces_offset, 
+                              face[1] + back_faces_offset])
+        
+        for c in range(W - 1): # Top edge
+            idx0 = vertex_indices_map[(0,c)]
+            idx1 = vertex_indices_map[(0,c+1)]
+            all_faces.extend(create_side_quad(idx0, idx1, idx0 + num_front_vertices, idx1 + num_front_vertices))
+        for c in range(W - 1): # Bottom edge
+            idx0 = vertex_indices_map[(H-1,c)]
+            idx1 = vertex_indices_map[(H-1,c+1)]
+            all_faces.extend(create_side_quad(idx0, idx1, idx0 + num_front_vertices, idx1 + num_front_vertices, flip_quad=True))
+        for r in range(H - 1): # Left edge
+            idx0 = vertex_indices_map[(r,0)]
+            idx1 = vertex_indices_map[(r+1,0)]
+            all_faces.extend(create_side_quad(idx0, idx1, idx0 + num_front_vertices, idx1 + num_front_vertices, flip_quad=True))
+        for r in range(H - 1): # Right edge
+            idx0 = vertex_indices_map[(r,W-1)]
+            idx1 = vertex_indices_map[(r+1,W-1)]
+            all_faces.extend(create_side_quad(idx0, idx1, idx0 + num_front_vertices, idx1 + num_front_vertices))
+
+        final_mesh_vertices = all_vertices
+        final_mesh_faces = np.array(all_faces, dtype=np.int32)
+        
+        solid_mesh = trimesh.Trimesh(vertices=final_mesh_vertices, faces=final_mesh_faces, process=True)
+        try:
+            solid_mesh.fix_normals(multibody=False) # multibody=False if it's meant to be a single coherent object
+        except Exception as e_fix_normals:
+            print(f"Warning: trimesh.fix_normals failed: {e_fix_normals}. Mesh normals might be inconsistent.")
+
+        all_uvs = np.vstack((front_uvs_np, front_uvs_np)) 
+
         material = trimesh.visual.texture.SimpleMaterial(image=texture_image_rgba_pil)
-        mesh.visual = trimesh.visual.TextureVisuals(uv=uvs_np, material=material)
-        
-        print(f"Exporting mesh with {len(mesh.vertices)} vertices and {len(mesh.faces)} faces.")
-        glb_data = mesh.export(file_type='glb')
+        solid_mesh.visual = trimesh.visual.TextureVisuals(uv=all_uvs, material=material)
+
+        print(f"Exporting solid mesh with {len(solid_mesh.vertices)} vertices and {len(solid_mesh.faces)} faces.")
+        glb_data = solid_mesh.export(file_type='glb')
         with open(output_glb_path, 'wb') as f:
             f.write(glb_data)
-        print(f"GLB file saved to {output_glb_path}")
+        print(f"Solid GLB file saved to {output_glb_path}")
 
-    except ImportError:
+    except ImportError: 
         print("Trimesh library is not installed. Cannot create GLB.")
         print("Please install it: pip install trimesh[easy]")
-        with open(output_glb_path, 'w') as f:
-            f.write("Error - Trimesh not installed. Mesh generation skipped.")
+        with open(output_glb_path, 'w') as f: f.write("Error - Trimesh not installed.")
     except Exception as e:
-        print(f"An error occurred during GLB creation: {e}")
+        print(f"An error occurred during solid GLB creation: {e}")
         import traceback
         traceback.print_exc()
-        with open(output_glb_path, 'w') as f:
-            f.write(f"Error during GLB creation: {e}")
+        with open(output_glb_path, 'w') as f: f.write(f"Error during GLB creation: {e}")
+
+def create_side_quad(v0_front, v1_front, v0_back, v1_back, flip_quad=False):
+    """ Helper to create two triangles for a side quad ensuring outward normals. """
+    if flip_quad: # Typically for bottom and left edges when viewed from outside
+        return [[v0_front, v0_back, v1_back], [v0_front, v1_back, v1_front]] 
+    else: # Typically for top and right edges
+        return [[v0_front, v1_front, v1_back], [v0_front, v1_back, v0_back]]
 
 
 def main():
-    parser = argparse.ArgumentParser(description="MVP Backend Processor: Convert 2D image to 3D GLB with background removal.")
+    parser = argparse.ArgumentParser(description="MVP Backend Processor: Convert 2D image to 3D GLB with background removal and solid extrusion.")
     parser.add_argument("input_image", type=str, help="Path to the input image file (e.g., my_chair.jpg).")
     parser.add_argument("output_glb", type=str, help="Path to save the output GLB file (e.g., my_chair.glb).")
     parser.add_argument("--model_type", type=str, default="MiDaS_small", 
-                        help="MiDaS model type (e.g., 'MiDaS_small', 'dpt_beit_large_512', 'dpt_hybrid_midas'). Check MiDaS/torch.hub for options.")
+                        help="MiDaS model type (e.g., 'MiDaS_small', 'dpt_hybrid_midas', 'dpt_beit_large_512'). Check MiDaS/torch.hub for options.")
     parser.add_argument("--depth_scale", type=float, default=0.1,
-                        help="Factor to scale the depth effect (thickness of the model). Default: 0.1")
+                        help="Factor to scale the depth effect (prominence of the object). Default: 0.1")
+    parser.add_argument("--thickness", type=float, default=0.05,
+                        help="Thickness for the 'solid' extrusion of the object. Default: 0.05")
     
     args = parser.parse_args()
 
@@ -263,14 +324,11 @@ def main():
         print(f"Error: Input image not found at {args.input_image}")
         return
 
-    # 1. Load MiDaS model
-    midas_model, midas_transform_func, device = load_midas_model(args.model_type) # Renamed midas_transform to midas_transform_func
+    midas_model, midas_transform_func, device = load_midas_model(args.model_type)
     if midas_model is None or midas_transform_func is None:
         print("Exiting due to model loading failure.")
         return
 
-    # 2. Preprocess image for MiDaS (using original image for better depth context)
-    #    and get the original RGB numpy array for segmentation.
     input_batch_for_midas, original_rgb_np = preprocess_image(args.input_image, midas_transform_func)
     if input_batch_for_midas is None or original_rgb_np is None:
         print("Exiting due to image preprocessing failure for MiDaS.")
@@ -278,33 +336,27 @@ def main():
     
     original_height, original_width = original_rgb_np.shape[:2]
 
-    # 3. Segment foreground from the original RGB image
-    # This returns an RGBA PIL image (for texturing) and a numpy mask
     segmented_rgba_pil, foreground_mask_np = segment_foreground(original_rgb_np)
-    # segmented_rgba_pil will be used as texture
-    # foreground_mask_np will be used to flatten background depth
 
-    # 4. Get depth map using MiDaS on the original image context
     depth_map_np = get_depth_map(midas_model, input_batch_for_midas, device, original_height, original_width)
     if depth_map_np is None:
         print("Exiting due to depth map generation failure.")
         return
         
     try:
-        # Visualize the raw depth map from MiDaS
         depth_map_visual_raw = (depth_map_np - np.min(depth_map_np)) / (np.max(depth_map_np) - np.min(depth_map_np)) * 255
         cv2.imwrite("depth_map_output_raw.png", depth_map_visual_raw.astype(np.uint8))
         print("Raw depth map visualization saved to depth_map_output_raw.png")
     except Exception as e:
         print(f"Could not save raw depth map visualization: {e}")
 
-    # 5. Create GLB from depth map, segmented RGBA texture, and foreground mask
     create_glb_from_depth_and_texture(
         depth_map_np, 
-        segmented_rgba_pil, # Use the RGBA image with transparent background as texture
-        foreground_mask_np, # Use the mask to control depth of background
+        segmented_rgba_pil, 
+        foreground_mask_np, 
         args.output_glb, 
-        depth_scale_factor=args.depth_scale
+        depth_scale_factor=args.depth_scale,
+        thickness=args.thickness
     )
 
     print(f"Processing complete. Check {args.output_glb}.")
